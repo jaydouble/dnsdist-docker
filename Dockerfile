@@ -1,25 +1,28 @@
-FROM alpine
+FROM debian:buster-slim
 
-RUN apk --update upgrade && apk add dnsdist openssl
+# RUN echo 'deb http://deb.debian.org/debian buster-backports main' > /etc/apt/sources.list.d/backports.list
 
-COPY ./dnsdist.conf /etc/dnsdist.conf
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates gnupg2 && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /etc/dnsdist/conf.d; mkdir -p /etc/dnsdist/cert; chown -R dnsdist:dnsdist /etc/dnsdist/
+COPY ./pdns.list /etc/apt/sources.list.d/pdns.list
+COPY ./dnsdist /etc/apt/preferences.d/dnsdist
 
-RUN if [ ! -f /etc/dnsdist/cert/fullchain.cer ]; then \
-	openssl req -nodes -x509 -newkey rsa:2048 \
-		-keyout /etc/dnsdist/cert/ca.key -out /etc/dnsdist/cert/ca.crt \
-		-subj "/C=NL/ST=NHD/L=Amsterdam/O=Company/OU=root/CN=`hostname -f`/emailAddress=dnsdist@`hostname -f`" && \
-	openssl req -nodes -newkey rsa:2048 \
-		-keyout /etc/dnsdist/cert/key.key -out /etc/dnsdist/cert/server.csr \
-		-subj "/C=NL/ST=NHD/L=Amsterdam/O=Company/OU=root/CN=`hostname -f`/emailAddress=dnsdist@`hostname -f`" && \
-	openssl x509 -req -in /etc/dnsdist/cert/server.csr -CA /etc/dnsdist/cert/ca.crt -CAkey /etc/dnsdist/cert/ca.key -CAcreateserial -out /etc/dnsdist/cert/fullchain.cer; fi
+RUN	curl https://repo.powerdns.com/CBC8B383-pub.asc | apt-key add - && \
+	curl https://repo.powerdns.com/FD380FBB-pub.asc | apt-key add - && \
+	apt-get update && apt-get install -y --no-install-recommends openssl dnsdist && rm -rf /var/lib/apt/lists/*
+
+COPY ./dnsdist.conf /etc/dnsdist/dnsdist.conf
+
+RUN mkdir -p /etc/dnsdist/conf.d; mkdir -p /etc/dnsdist/cert; chown -R _dnsdist:_dnsdist /etc/dnsdist/
+
+# we put dnsdist behind revproxy, so no need any more for certificates
+
+CMD ["dnsdist", "--verbose", "--supervised"]
 
 
-CMD ["dnsdist", "--verbose"]
-
-
-EXPOSE 53/udp
-EXPOSE 53
+# EXPOSE 53/udp
+# EXPOSE 53
+# DNS over HTTP:
+EXPOSE 5053
 
 VOLUME /etc/dnsdist/
